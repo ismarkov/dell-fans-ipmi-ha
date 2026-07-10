@@ -31,7 +31,8 @@
           "base_path": "Redfish 基礎路徑",
           "allow_insecure_tls": "允許不安全的 TLS（略過憑證驗證）",
           "timeout": "Redfish 逾時（秒）",
-          "ipmi_timeout": "IPMI 逾時（秒）"
+          "ipmi_timeout": "IPMI 逾時（秒）",
+          "power_off_mode": "關機模式（graceful = ACPI 正常關機，hard = 立即斷電）"
         }
       }
     }
@@ -60,6 +61,14 @@
           "manual": "手動"
         }
       }
+    },
+    "switch": {
+      "power": { "name": "電源" }
+    },
+    "button": {
+      "force_off": { "name": "強制關機" },
+      "power_cycle": { "name": "電源循環" },
+      "hard_reset": { "name": "強制重置" }
     }
   }
 }

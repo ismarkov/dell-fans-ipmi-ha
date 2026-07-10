@@ -56,26 +56,39 @@ class FanControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self._mode: str = "unknown"
         self._speed: int | None = None
+        # Optimistic power state held until a real reading confirms it, so the
+        # switch reflects the command immediately during the seconds-long
+        # power transition rather than showing the pre-command state.
+        self._power_optimistic: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            dev = await self.client.get_device_id()
-            return {
-                "connection_ok": True,
-                "device_info": dev,
-                "mode": self._mode,
-                "speed_percent": self._speed,
-                "error": None,
-            }
+            status = await self.client.get_status()
         except IpmiError as exc:
             _LOGGER.debug("IPMI probe failed: %s", exc)
             return {
                 "connection_ok": False,
                 "device_info": None,
+                "power_on": None,
                 "mode": self._mode,
                 "speed_percent": self._speed,
                 "error": str(exc),
             }
+
+        real = status.get("power_on")
+        if self._power_optimistic is not None and real == self._power_optimistic:
+            self._power_optimistic = None
+        power_on = (
+            self._power_optimistic if self._power_optimistic is not None else real
+        )
+        return {
+            "connection_ok": True,
+            "device_info": status.get("device_info"),
+            "power_on": power_on,
+            "mode": self._mode,
+            "speed_percent": self._speed,
+            "error": None,
+        }
 
     async def async_set_auto_mode(self) -> None:
         """Send Dell auto-fan command via IPMI."""
@@ -89,4 +102,16 @@ class FanControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.client.set_manual_fan_speed(speed)
         self._mode = "manual"
         self._speed = speed
+        await self.async_request_refresh()
+
+    async def async_set_power(self, action: str) -> None:
+        """Send a chassis power command via IPMI (on/off/soft_off/cycle/reset)."""
+        await self.client.set_power(action)
+        if action == "on":
+            self._power_optimistic = True
+        elif action in ("off", "soft_off"):
+            self._power_optimistic = False
+        else:
+            # cycle / reset: transient off→on; let the real reading settle it.
+            self._power_optimistic = None
         await self.async_request_refresh()

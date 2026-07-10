@@ -31,6 +31,19 @@ DELL_SET_AUTO = bytes([0x30, 0x30, 0x01, 0x01])
 DELL_DISABLE_AUTO = bytes([0x30, 0x30, 0x01, 0x00])
 DELL_SET_SPEED_PREFIX = bytes([0x30, 0x30, 0x02, 0xFF])
 
+# Chassis power control (IPMI spec — NetFn Chassis 0x00)
+_CHASSIS_NETFN = 0x00
+_CMD_CHASSIS_STATUS = 0x01
+_CMD_CHASSIS_CONTROL = 0x02
+# Control-byte values for Chassis Control (cmd 0x02)
+POWER_CONTROL_CODES: dict[str, int] = {
+    "on": 0x01,       # power up
+    "off": 0x00,      # power down (hard)
+    "soft_off": 0x05, # graceful shutdown via ACPI
+    "cycle": 0x02,    # power cycle
+    "reset": 0x03,    # hard reset
+}
+
 _CIPHER_PROFILES: list[dict[str, Any]] = [
     {
         "name": "sha256-aes128",
@@ -489,6 +502,41 @@ class IpmiClient:
 
     async def get_device_id(self) -> dict[str, Any]:
         return await self._with_session(self._cmd_device_id)
+
+    async def get_status(self) -> dict[str, Any]:
+        """Fetch device ID and chassis power state in a single session."""
+
+        async def _action(s: _Session) -> dict[str, Any]:
+            dev_resp = await s.command(0x06, 0x01, [], "GetDeviceID")
+            device_info = _parse_device_info(dev_resp["data"])
+            power_on: bool | None
+            try:
+                ch = await s.command(
+                    _CHASSIS_NETFN, _CMD_CHASSIS_STATUS, [], "GetChassisStatus"
+                )
+                power_on = bool(ch["data"][0] & 0x01) if ch["data"] else None
+            except IpmiError:
+                power_on = None
+            return {"device_info": device_info, "power_on": power_on}
+
+        return await self._with_session(_action)
+
+    async def set_power(self, action: str) -> dict[str, Any]:
+        """Send a Chassis Control power command (on/off/soft_off/cycle/reset)."""
+        if action not in POWER_CONTROL_CODES:
+            raise IpmiError(f"Unknown power action: {action}")
+        code = POWER_CONTROL_CODES[action]
+
+        async def _action(s: _Session) -> dict[str, Any]:
+            await s.command(
+                _CHASSIS_NETFN,
+                _CMD_CHASSIS_CONTROL,
+                [code],
+                f"ChassisControl:{action}",
+            )
+            return {"ok": True}
+
+        return await self._with_session(_action)
 
     async def set_automatic_fan_mode(self) -> dict[str, Any]:
         return await self._with_session(self._cmd_set_auto)

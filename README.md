@@ -10,9 +10,10 @@ A Home Assistant custom integration that lets you **monitor** and **control** De
 |----------|---------|
 | **Telemetry (Redfish)** | System model, power state, BIOS version, service tag, CPU, memory, temperatures, fan RPM, power consumption, PSU voltages |
 | **Fan Control (IPMI)** | Switch between automatic and manual fan mode; set a fixed fan speed percentage (0–100 %) |
-| **Platforms** | `sensor`, `number` (fan speed slider), `select` (auto / manual mode) |
+| **Power Control (IPMI)** | Power the host on/off (graceful ACPI shutdown by default); force off, power cycle, and hard reset buttons |
+| **Platforms** | `sensor`, `number` (fan speed slider), `select` (auto / manual mode), `switch` (power), `button` (force off / cycle / reset) |
 | **Config Flow** | UI-based setup with connection validation |
-| **Options Flow** | Adjust scan interval, Redfish base path, TLS settings, timeouts after initial setup |
+| **Options Flow** | Adjust scan interval, Redfish base path, TLS settings, timeouts, and power-off mode after initial setup |
 | **Localisation** | English, Traditional Chinese (zh-Hant) |
 
 ## Requirements
@@ -57,6 +58,7 @@ After setup, click **Configure** on the integration card to adjust:
 | Allow insecure TLS | Yes | Skip certificate verification (common for self-signed iDRAC certs) |
 | Redfish timeout | 8 s | HTTP request timeout |
 | IPMI timeout | 5 s | UDP session timeout |
+| Power off mode | Graceful | `graceful` = ACPI shutdown (lets the OS shut down cleanly); `hard` = immediate power down. Controls the **Power** switch's off action |
 
 ## Entities
 
@@ -74,6 +76,17 @@ After setup, click **Configure** on the integration card to adjust:
 
 - **Fan Mode** (`select`) — switch between `auto` and `manual`
 - **Fan Speed** (`number`) — slider 0–100 %; setting a value automatically switches to manual mode
+- **Power** (`switch`) — host power on/off. Off performs a **graceful ACPI shutdown** by default (change to immediate via the *Power off mode* option). Reflects live power state from IPMI Get Chassis Status
+- **Force Off** / **Power Cycle** / **Hard Reset** (`button`) — abrupt actions kept as momentary buttons rather than a toggle. IPMI has no graceful restart, so restarts are always abrupt
+
+> **Confirmation prompts:** Home Assistant can't enforce an "are you sure?" dialog from the integration itself. To guard against accidental presses, add a confirmation to the dashboard card's tap action:
+>
+> ```yaml
+> tap_action:
+>   action: toggle          # or: perform-action, for a button
+>   confirmation:
+>     text: "Power off the server?"
+> ```
 
 ## How It Works
 
@@ -108,9 +121,10 @@ Dell, the Dell logo, iDRAC, PowerEdge, and Redfish are trademarks or registered 
 |------|------|
 | **遙測（Redfish）** | 系統型號、電源狀態、BIOS 版本、Service Tag、CPU、記憶體、溫度、風扇 RPM、功耗、PSU 電壓 |
 | **風扇控制（IPMI）** | 切換自動/手動模式；設定固定風扇轉速百分比（0–100%） |
-| **平台** | `sensor`、`number`（風扇轉速滑桿）、`select`（自動/手動模式） |
+| **電源控制（IPMI）** | 主機開機/關機（預設為 ACPI 正常關機）；強制關機、電源循環、強制重置按鈕 |
+| **平台** | `sensor`、`number`（風扇轉速滑桿）、`select`（自動/手動模式）、`switch`（電源）、`button`（強制關機/循環/重置） |
 | **設定流程** | 支援 UI 設定，建立時會先驗證連線 |
-| **選項流程** | 可在安裝後調整輪詢間隔、Redfish 路徑、TLS 設定與逾時 |
+| **選項流程** | 可在安裝後調整輪詢間隔、Redfish 路徑、TLS 設定、逾時與關機模式 |
 | **在地化** | 英文、正體中文（zh-Hant） |
 
 ## 需求
@@ -155,6 +169,7 @@ Dell, the Dell logo, iDRAC, PowerEdge, and Redfish are trademarks or registered 
 | 允許不安全 TLS | 是 | 跳過憑證驗證（常見於自簽章憑證） |
 | Redfish 逾時 | 8 秒 | HTTP 請求逾時 |
 | IPMI 逾時 | 5 秒 | UDP Session 逾時 |
+| 關機模式 | 正常關機 | `graceful` = ACPI 正常關機（讓作業系統乾淨關閉）；`hard` = 立即斷電。控制**電源**開關的關機動作 |
 
 ## 實體（Entities）
 
@@ -172,6 +187,17 @@ Dell, the Dell logo, iDRAC, PowerEdge, and Redfish are trademarks or registered 
 
 - **Fan Mode**（`select`）：切換 `auto` / `manual`
 - **Fan Speed**（`number`）：0–100% 滑桿；設定值時會自動切到手動模式
+- **Power**（`switch`）：主機開機/關機。關機預設為 **ACPI 正常關機**（可透過「關機模式」選項改為立即斷電）。狀態即時取自 IPMI Get Chassis Status
+- **Force Off** / **Power Cycle** / **Hard Reset**（`button`）：較激烈的動作，刻意保留為瞬時按鈕而非開關。IPMI 沒有正常重啟，因此重啟一律為強制
+
+> **確認提示：** Home Assistant 無法由整合本身強制彈出「確定嗎？」對話框。為避免誤觸，可在儀表板卡片的 tap action 加入確認：
+>
+> ```yaml
+> tap_action:
+>   action: toggle          # 按鈕請用：perform-action
+>   confirmation:
+>     text: "確定要關閉伺服器嗎？"
+> ```
 
 ## 運作方式
 
