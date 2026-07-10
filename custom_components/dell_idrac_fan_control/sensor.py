@@ -24,7 +24,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_PORT, DOMAIN
-from .coordinator import TelemetryCoordinator
+from .coordinator import FanControlCoordinator, TelemetryCoordinator
 
 
 # ---------------------------------------------------------------------------
@@ -50,12 +50,6 @@ STATIC_SENSORS: tuple[DellIdracSensorDescription, ...] = (
         icon="mdi:server",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: (d.get("system") or {}).get("model"),
-    ),
-    DellIdracSensorDescription(
-        key="power_state",
-        translation_key="power_state",
-        icon="mdi:power",
-        value_fn=lambda d: (d.get("system") or {}).get("power_state"),
     ),
     DellIdracSensorDescription(
         key="bios_version",
@@ -139,6 +133,14 @@ async def async_setup_entry(
     async_add_entities(
         DellIdracStaticSensor(coordinator, entry, desc) for desc in STATIC_SENSORS
     )
+
+    # Power State comes from the IPMI coordinator (fast, reliable) rather than
+    # the slow Redfish system fetch, which is now cached and would otherwise go
+    # stale between polls.
+    fan_control: FanControlCoordinator = hass.data[DOMAIN][entry.entry_id][
+        "fan_control"
+    ]
+    async_add_entities([DellIdracPowerStateSensor(fan_control, entry)])
 
     # Fans, temperatures and PSUs are discovered from telemetry, which only
     # lists them when present (eg fans report no RPM while the host is off).
@@ -229,6 +231,37 @@ class DellIdracStaticSensor(
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class DellIdracPowerStateSensor(
+    CoordinatorEntity[FanControlCoordinator], SensorEntity
+):
+    """Host power state (On/Off), sourced from IPMI chassis status."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "power_state"
+    _attr_icon = "mdi:power"
+
+    def __init__(
+        self,
+        coordinator: FanControlCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_power_state"
+
+    @property
+    def device_info(self):  # noqa: D102
+        telemetry = self.hass.data[DOMAIN][self._entry.entry_id].get("telemetry")
+        return _device_info(self._entry, telemetry.data if telemetry else None)
+
+    @property
+    def native_value(self):  # noqa: D102
+        power_on = (self.coordinator.data or {}).get("power_on")
+        if power_on is None:
+            return None
+        return "On" if power_on else "Off"
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,14 @@
 """Redfish API client for Dell iDRAC."""
 from __future__ import annotations
 
+import asyncio
+import logging
 import ssl
 from typing import Any
 
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class RedfishError(Exception):
@@ -47,6 +51,13 @@ class RedfishClient:
 
         self._session: aiohttp.ClientSession | None = None
         self._core_paths: dict[str, str] | None = None
+        # System + manager data never changes at runtime — fetch once and cache
+        # so each poll only hits the dynamic Thermal and Power resources.
+        self._static: dict[str, Any] | None = None
+        # iDRAC's HTTP server is slow and occasionally drops idle keep-alive
+        # sockets; retry transient failures so one blip doesn't fail the poll.
+        self._retries = 2
+        self._retry_backoff = 0.5
 
     # ------------------------------------------------------------------
     # Session helpers
@@ -68,6 +79,7 @@ class RedfishClient:
             await self._session.close()
         self._session = None
         self._core_paths = None
+        self._static = None
 
     # ------------------------------------------------------------------
     # Low-level request
@@ -75,21 +87,35 @@ class RedfishClient:
 
     async def _request_json(self, path: str, label: str) -> dict[str, Any]:
         normalized = path if path.startswith("/") else f"{self._base_path}/{path}"
-        session = self._ensure_session()
-        try:
-            async with session.get(
-                normalized, headers={"Accept": "application/json"}
-            ) as resp:
-                if resp.status == 401:
-                    raise RedfishError(f"{label}: authentication failed (HTTP 401)")
-                if resp.status < 200 or resp.status >= 300:
-                    body = await resp.text()
-                    raise RedfishError(
-                        f"{label} failed (HTTP {resp.status}): {body[:240]}"
+        last_exc: Exception | None = None
+        for attempt in range(self._retries + 1):
+            session = self._ensure_session()
+            try:
+                async with session.get(
+                    normalized, headers={"Accept": "application/json"}
+                ) as resp:
+                    if resp.status == 401:
+                        raise RedfishError(
+                            f"{label}: authentication failed (HTTP 401)"
+                        )
+                    if resp.status < 200 or resp.status >= 300:
+                        body = await resp.text()
+                        raise RedfishError(
+                            f"{label} failed (HTTP {resp.status}): {body[:240]}"
+                        )
+                    return await resp.json(content_type=None)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                # Transient: slow/dropped connection or read timeout. Retry a
+                # couple of times before surfacing it to the coordinator.
+                last_exc = exc
+                if attempt < self._retries:
+                    _LOGGER.debug(
+                        "%s attempt %d/%d failed (%s); retrying",
+                        label, attempt + 1, self._retries + 1, exc,
                     )
-                return await resp.json(content_type=None)
-        except aiohttp.ClientError as exc:
-            raise RedfishError(f"{label}: {exc}") from exc
+                    await asyncio.sleep(self._retry_backoff * (attempt + 1))
+                    continue
+        raise RedfishError(f"{label}: {last_exc}") from last_exc
 
     # ------------------------------------------------------------------
     # Path resolution (cached)
@@ -124,10 +150,17 @@ class RedfishClient:
         if not chassis_path:
             raise RedfishError("System does not expose a linked Chassis")
 
+        # Fetch the chassis once here to resolve its Thermal and Power links,
+        # so per-poll updates can hit those directly instead of re-fetching the
+        # chassis every cycle. Paths are cached, so this GET happens only once.
+        chassis = await self._request_json(chassis_path, "Chassis")
+
         return {
             "system": system_path,
             "manager": manager_path,
             "chassis": chassis_path,
+            "thermal": _odata_id(chassis.get("Thermal")),
+            "power": _odata_id(chassis.get("Power")),
         }
 
     async def _first_member(
@@ -156,19 +189,51 @@ class RedfishClient:
         """Quick connectivity check — returns system summary."""
         return await self.get_system_summary()
 
-    async def get_all_data(self) -> dict[str, Any]:
-        """Fetch system, manager, thermal, and power data in one pass."""
+    async def get_all_data(
+        self, previous: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return telemetry for one poll.
+
+        Only the dynamic Thermal and Power resources are fetched each cycle;
+        the static system/manager data is fetched once and cached. If a
+        dynamic section fails after retries, the previous value is reused so a
+        single slow request doesn't blank every entity — a Dell iDRAC's
+        Redfish stack is slow enough that this happens routinely.
+        """
         paths = await self._get_core_paths()
-        system = await self._fetch_system(paths)
-        manager = await self._fetch_manager(paths)
-        thermal = await self._fetch_thermal(paths)
-        power = await self._fetch_power(paths)
-        return {
-            "system": system,
-            "manager": manager,
-            "thermal": thermal,
-            "power": power,
+        static = await self._get_static()
+        prev = previous or {}
+
+        result: dict[str, Any] = {
+            "system": static["system"],
+            "manager": static["manager"],
         }
+        for key, fetch in (
+            ("thermal", self._fetch_thermal),
+            ("power", self._fetch_power),
+        ):
+            try:
+                result[key] = await fetch(paths)
+            except RedfishError as exc:
+                if key in prev:
+                    _LOGGER.warning(
+                        "Redfish %s fetch failed (%s); using previous values",
+                        key, exc,
+                    )
+                    result[key] = prev[key]
+                else:
+                    raise
+        return result
+
+    async def _get_static(self) -> dict[str, Any]:
+        """Fetch and cache system + manager data (static at runtime)."""
+        if self._static is None:
+            paths = await self._get_core_paths()
+            self._static = {
+                "system": await self._fetch_system(paths),
+                "manager": await self._fetch_manager(paths),
+            }
+        return self._static
 
     async def get_system_summary(self) -> dict[str, Any]:
         paths = await self._get_core_paths()
@@ -212,8 +277,7 @@ class RedfishClient:
         }
 
     async def _fetch_thermal(self, paths: dict[str, str]) -> dict[str, Any]:
-        chassis = await self._request_json(paths["chassis"], "Chassis")
-        thermal_path = _odata_id(chassis.get("Thermal"))
+        thermal_path = paths.get("thermal")
         if not thermal_path:
             return {"fans": [], "temperatures": []}
         thermal = await self._request_json(thermal_path, "Thermal")
@@ -228,8 +292,7 @@ class RedfishClient:
         return {"fans": fans, "temperatures": temps}
 
     async def _fetch_power(self, paths: dict[str, str]) -> dict[str, Any]:
-        chassis = await self._request_json(paths["chassis"], "Chassis")
-        power_path = _odata_id(chassis.get("Power"))
+        power_path = paths.get("power")
         if not power_path:
             return {"power_control": None, "power_supplies": []}
         power = await self._request_json(power_path, "Power")

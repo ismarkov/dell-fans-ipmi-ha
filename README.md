@@ -95,8 +95,9 @@ Home Assistant
   └── FanControlCoordinator ─► IPMI RMCP+ UDP ──► iDRAC
 ```
 
-- **Redfish** reads system, manager, thermal, and power data via HTTPS Basic Auth.
-- **IPMI** uses a pure-Python RMCP+ implementation (AES-128-CBC + HMAC-SHA256/SHA1) to send Dell OEM raw commands for fan control — no external binaries needed.
+- **Redfish** reads system, manager, thermal, and power data via HTTPS Basic Auth. iDRAC's Redfish stack is slow, so each poll fetches only the **dynamic** Thermal and Power resources (2 requests); static inventory (model, BIOS, iDRAC firmware, etc) is fetched once and cached, resource paths are resolved once, requests retry on transient failures, and a slow section falls back to its previous values so one timeout doesn't blank every entity.
+- **Power State** is read over IPMI (Get Chassis Status) rather than Redfish, since IPMI responds in ~0.1 s versus several seconds for Redfish on iDRAC8.
+- **IPMI** uses a pure-Python RMCP+ implementation (AES-128-CBC + HMAC-SHA256/SHA1) to send Dell OEM raw commands for fan control and chassis power control — no external binaries needed.
 
 ## License
 

@@ -33,7 +33,7 @@ class TelemetryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            return await self.client.get_all_data()
+            return await self.client.get_all_data(previous=self.data)
         except RedfishError as exc:
             raise UpdateFailed(str(exc)) from exc
 
