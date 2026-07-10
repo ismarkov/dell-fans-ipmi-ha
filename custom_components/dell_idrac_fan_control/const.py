@@ -28,7 +28,6 @@ POWER_OFF_MODES: list[str] = ["graceful", "hard"]
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
-    Platform.NUMBER,
     Platform.SELECT,
     Platform.SWITCH,
     Platform.BUTTON,

@@ -50,17 +50,8 @@
       "power_average": { "name": "平均功耗" },
       "power_peak": { "name": "尖峰功耗" }
     },
-    "number": {
-      "fan_speed": { "name": "風扇轉速" }
-    },
     "select": {
-      "fan_mode": {
-        "name": "風扇模式",
-        "state": {
-          "auto": "自動",
-          "manual": "手動"
-        }
-      }
+      "fan_speed": { "name": "風扇轉速" }
     },
     "switch": {
       "power": { "name": "電源" }

@@ -32,7 +32,13 @@ class RedfishClient:
         self._timeout = timeout
 
         if allow_insecure_tls:
-            ctx = ssl.create_default_context()
+            # Build a non-verifying context directly rather than via
+            # ssl.create_default_context(), which calls load_default_certs() —
+            # blocking file I/O that Home Assistant forbids inside the event
+            # loop. Verification is disabled here anyway, so the system trust
+            # store is never needed. check_hostname must be cleared before
+            # setting CERT_NONE or SSLContext raises ValueError.
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             self._ssl: ssl.SSLContext | None = ctx

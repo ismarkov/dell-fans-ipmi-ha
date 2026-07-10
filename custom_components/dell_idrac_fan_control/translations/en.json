@@ -50,17 +50,8 @@
       "power_average": { "name": "Average Power" },
       "power_peak": { "name": "Peak Power" }
     },
-    "number": {
-      "fan_speed": { "name": "Fan Speed" }
-    },
     "select": {
-      "fan_mode": {
-        "name": "Fan Mode",
-        "state": {
-          "auto": "Auto",
-          "manual": "Manual"
-        }
-      }
+      "fan_speed": { "name": "Fan Speed" }
     },
     "switch": {
       "power": { "name": "Power" }

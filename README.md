@@ -9,9 +9,9 @@ A Home Assistant custom integration that lets you **monitor** and **control** De
 | Category | Details |
 |----------|---------|
 | **Telemetry (Redfish)** | System model, power state, BIOS version, service tag, CPU, memory, temperatures, fan RPM, power consumption, PSU voltages |
-| **Fan Control (IPMI)** | Switch between automatic and manual fan mode; set a fixed fan speed percentage (0–100 %) |
+| **Fan Control (IPMI)** | Single dropdown — `Auto` (Dell automatic curve) or a fixed speed in 10 % steps (10 %–100 %) |
 | **Power Control (IPMI)** | Power the host on/off (graceful ACPI shutdown by default); force off, power cycle, and hard reset buttons |
-| **Platforms** | `sensor`, `number` (fan speed slider), `select` (auto / manual mode), `switch` (power), `button` (force off / cycle / reset) |
+| **Platforms** | `sensor`, `select` (fan speed), `switch` (power), `button` (force off / cycle / reset) |
 | **Config Flow** | UI-based setup with connection validation |
 | **Options Flow** | Adjust scan interval, Redfish base path, TLS settings, timeouts, and power-off mode after initial setup |
 | **Localisation** | English, Traditional Chinese (zh-Hant) |
@@ -74,8 +74,7 @@ After setup, click **Configure** on the integration card to adjust:
 
 ### Controls (IPMI)
 
-- **Fan Mode** (`select`) — switch between `auto` and `manual`
-- **Fan Speed** (`number`) — slider 0–100 %; setting a value automatically switches to manual mode
+- **Fan Speed** (`select`) — one dropdown: `Auto` restores Dell's automatic fan curve; picking a percentage (10 %–100 %) sets that fixed speed. After a change, the per-fan RPM sensors are refreshed within a few seconds so you can confirm it took effect
 - **Power** (`switch`) — host power on/off. Off performs a **graceful ACPI shutdown** by default (change to immediate via the *Power off mode* option). Reflects live power state from IPMI Get Chassis Status
 - **Force Off** / **Power Cycle** / **Hard Reset** (`button`) — abrupt actions kept as momentary buttons rather than a toggle. IPMI has no graceful restart, so restarts are always abrupt
 
@@ -120,9 +119,9 @@ Dell, the Dell logo, iDRAC, PowerEdge, and Redfish are trademarks or registered 
 | 類別 | 說明 |
 |------|------|
 | **遙測（Redfish）** | 系統型號、電源狀態、BIOS 版本、Service Tag、CPU、記憶體、溫度、風扇 RPM、功耗、PSU 電壓 |
-| **風扇控制（IPMI）** | 切換自動/手動模式；設定固定風扇轉速百分比（0–100%） |
+| **風扇控制（IPMI）** | 單一下拉選單 — `Auto`（Dell 自動曲線）或固定轉速，以 10% 為級距（10%–100%） |
 | **電源控制（IPMI）** | 主機開機/關機（預設為 ACPI 正常關機）；強制關機、電源循環、強制重置按鈕 |
-| **平台** | `sensor`、`number`（風扇轉速滑桿）、`select`（自動/手動模式）、`switch`（電源）、`button`（強制關機/循環/重置） |
+| **平台** | `sensor`、`select`（風扇轉速）、`switch`（電源）、`button`（強制關機/循環/重置） |
 | **設定流程** | 支援 UI 設定，建立時會先驗證連線 |
 | **選項流程** | 可在安裝後調整輪詢間隔、Redfish 路徑、TLS 設定、逾時與關機模式 |
 | **在地化** | 英文、正體中文（zh-Hant） |
@@ -185,8 +184,7 @@ Dell, the Dell logo, iDRAC, PowerEdge, and Redfish are trademarks or registered 
 
 ### 控制（IPMI）
 
-- **Fan Mode**（`select`）：切換 `auto` / `manual`
-- **Fan Speed**（`number`）：0–100% 滑桿；設定值時會自動切到手動模式
+- **Fan Speed**（`select`）：單一下拉選單；`Auto` 恢復 Dell 自動風扇曲線，選擇百分比（10%–100%）則設定該固定轉速。變更後會在數秒內刷新各風扇 RPM 感測器，方便確認已生效
 - **Power**（`switch`）：主機開機/關機。關機預設為 **ACPI 正常關機**（可透過「關機模式」選項改為立即斷電）。狀態即時取自 IPMI Get Chassis Status
 - **Force Off** / **Power Cycle** / **Hard Reset**（`button`）：較激烈的動作，刻意保留為瞬時按鈕而非開關。IPMI 沒有正常重啟，因此重啟一律為強制
 

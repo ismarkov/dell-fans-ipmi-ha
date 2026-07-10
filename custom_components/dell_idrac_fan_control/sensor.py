@@ -19,7 +19,7 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -134,23 +134,44 @@ async def async_setup_entry(
 ) -> None:
     """Set up Dell iDRAC sensor entities."""
     coordinator: TelemetryCoordinator = hass.data[DOMAIN][entry.entry_id]["telemetry"]
-    entities: list[SensorEntity] = []
 
-    for desc in STATIC_SENSORS:
-        entities.append(DellIdracStaticSensor(coordinator, entry, desc))
+    # Static sensors always exist — add them once.
+    async_add_entities(
+        DellIdracStaticSensor(coordinator, entry, desc) for desc in STATIC_SENSORS
+    )
 
-    data = coordinator.data or {}
-    thermal = data.get("thermal") or {}
-    for fan in thermal.get("fans", []):
-        entities.append(DellIdracFanSensor(coordinator, entry, fan))
-    for temp in thermal.get("temperatures", []):
-        entities.append(DellIdracTempSensor(coordinator, entry, temp))
+    # Fans, temperatures and PSUs are discovered from telemetry, which only
+    # lists them when present (eg fans report no RPM while the host is off).
+    # Add them as they appear rather than only at setup, so an integration
+    # loaded against a powered-off server self-heals once it comes up.
+    known: set[str] = set()
 
-    power = data.get("power") or {}
-    for psu in power.get("power_supplies", []):
-        entities.append(DellIdracPsuSensor(coordinator, entry, psu))
+    @callback
+    def _discover() -> None:
+        data = coordinator.data or {}
+        thermal = data.get("thermal") or {}
+        power = data.get("power") or {}
+        new: list[SensorEntity] = []
+        for fan in thermal.get("fans", []):
+            key = f"fan_{fan['id']}"
+            if key not in known:
+                known.add(key)
+                new.append(DellIdracFanSensor(coordinator, entry, fan))
+        for temp in thermal.get("temperatures", []):
+            key = f"temp_{temp['id']}"
+            if key not in known:
+                known.add(key)
+                new.append(DellIdracTempSensor(coordinator, entry, temp))
+        for psu in power.get("power_supplies", []):
+            key = f"psu_{psu['id']}"
+            if key not in known:
+                known.add(key)
+                new.append(DellIdracPsuSensor(coordinator, entry, psu))
+        if new:
+            async_add_entities(new)
 
-    async_add_entities(entities)
+    _discover()
+    entry.async_on_unload(coordinator.async_add_listener(_discover))
 
 
 # ---------------------------------------------------------------------------
