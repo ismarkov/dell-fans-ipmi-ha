@@ -23,18 +23,15 @@ from .const import (
     CONF_BASE_PATH,
     CONF_IPMI_PORT,
     CONF_IPMI_TIMEOUT,
-    CONF_POWER_OFF_MODE,
     DEFAULT_ALLOW_INSECURE_TLS,
     DEFAULT_BASE_PATH,
     DEFAULT_IPMI_PORT,
     DEFAULT_IPMI_TIMEOUT,
     DEFAULT_PORT,
-    DEFAULT_POWER_OFF_MODE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TIMEOUT,
     DEFAULT_USERNAME,
     DOMAIN,
-    POWER_OFF_MODES,
 )
 from .redfish import RedfishClient, RedfishError
 
@@ -134,10 +131,6 @@ class DellIdracOptionsFlow(OptionsFlow):
                     CONF_IPMI_TIMEOUT,
                     default=cur.get(CONF_IPMI_TIMEOUT, DEFAULT_IPMI_TIMEOUT),
                 ): vol.All(vol.Coerce(int), vol.Range(min=3, max=60)),
-                vol.Optional(
-                    CONF_POWER_OFF_MODE,
-                    default=cur.get(CONF_POWER_OFF_MODE, DEFAULT_POWER_OFF_MODE),
-                ): vol.In(POWER_OFF_MODES),
             }
         )
 

@@ -57,8 +57,9 @@ class FanControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._mode: str = "unknown"
         self._speed: int | None = None
         # Optimistic power state held until a real reading confirms it, so the
-        # switch reflects the command immediately during the seconds-long
-        # power transition rather than showing the pre-command state.
+        # Power State sensor and the power buttons' availability reflect the
+        # command immediately during the seconds-long power transition rather
+        # than showing the pre-command state.
         self._power_optimistic: bool | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -103,6 +104,18 @@ class FanControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._mode = "manual"
         self._speed = speed
         await self.async_request_refresh()
+
+    def restore_state(self, mode: str, speed: int | None) -> None:
+        """Seed mode/speed from a restored entity state (no IPMI command).
+
+        Dell's IPMI fan control is write-only — the BMC can't report the
+        current mode or setpoint — so on startup we adopt the last value the
+        select persisted, which is the best available estimate of live state.
+        """
+        self._mode = mode
+        self._speed = speed
+        if self.data is not None:
+            self.data = {**self.data, "mode": mode, "speed_percent": speed}
 
     async def async_set_power(self, action: str) -> None:
         """Send a chassis power command via IPMI (on/off/soft_off/cycle/reset)."""

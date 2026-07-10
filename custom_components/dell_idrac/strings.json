@@ -31,8 +31,7 @@
           "base_path": "Redfish base path",
           "allow_insecure_tls": "Allow insecure TLS (skip certificate verification)",
           "timeout": "Redfish timeout (seconds)",
-          "ipmi_timeout": "IPMI timeout (seconds)",
-          "power_off_mode": "Power off mode (graceful = ACPI shutdown, hard = immediate)"
+          "ipmi_timeout": "IPMI timeout (seconds)"
         }
       }
     }
@@ -53,10 +52,9 @@
     "select": {
       "fan_speed": { "name": "Fan Speed" }
     },
-    "switch": {
-      "power": { "name": "Power" }
-    },
     "button": {
+      "power_on": { "name": "Power On" },
+      "graceful_shutdown": { "name": "Graceful Shutdown" },
       "force_off": { "name": "Force Off" },
       "power_cycle": { "name": "Power Cycle" },
       "hard_reset": { "name": "Hard Reset" }

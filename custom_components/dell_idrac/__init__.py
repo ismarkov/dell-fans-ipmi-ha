@@ -61,9 +61,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     telemetry = TelemetryCoordinator(hass, redfish, scan_interval)
     fan_control = FanControlCoordinator(hass, ipmi, scan_interval)
 
-    await telemetry.async_config_entry_first_refresh()
-    # Fan control coordinator is resilient — never raises UpdateFailed
+    # Fan control (IPMI) is the mission-critical path: reading whether the
+    # server is on, and powering it on/off, must never depend on Redfish. Bring
+    # it up first — it's resilient and never raises UpdateFailed.
     await fan_control.async_config_entry_first_refresh()
+
+    # Telemetry (Redfish) is best-effort. iDRAC's Redfish stack is slow and
+    # flaky, so blocking setup on it would let a Redfish slow spell withhold the
+    # power controls on every HA restart or reload. Use async_refresh (which does
+    # not raise) so the integration always loads; sensors go available once
+    # Redfish responds, and the sensor platform's coordinator listener adds the
+    # dynamic fan/temperature/PSU entities when telemetry first succeeds.
+    await telemetry.async_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "redfish": redfish,

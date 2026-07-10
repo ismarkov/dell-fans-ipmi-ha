@@ -110,12 +110,15 @@ class RedfishClient:
                 last_exc = exc
                 if attempt < self._retries:
                     _LOGGER.debug(
-                        "%s attempt %d/%d failed (%s); retrying",
-                        label, attempt + 1, self._retries + 1, exc,
+                        "%s attempt %d/%d failed (%s: %s); retrying",
+                        label, attempt + 1, self._retries + 1,
+                        type(exc).__name__, exc,
                     )
                     await asyncio.sleep(self._retry_backoff * (attempt + 1))
                     continue
-        raise RedfishError(f"{label}: {last_exc}") from last_exc
+        raise RedfishError(
+            f"{label}: {type(last_exc).__name__}: {last_exc}"
+        ) from last_exc
 
     # ------------------------------------------------------------------
     # Path resolution (cached)

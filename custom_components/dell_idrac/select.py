@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_PORT, DOMAIN
@@ -40,7 +41,7 @@ async def async_setup_entry(
 
 
 class DellIdracFanSpeedSelect(
-    CoordinatorEntity[FanControlCoordinator], SelectEntity
+    CoordinatorEntity[FanControlCoordinator], RestoreEntity, SelectEntity
 ):
     """Single dropdown: Auto (Dell automatic curve) or a fixed fan speed."""
 
@@ -57,6 +58,18 @@ class DellIdracFanSpeedSelect(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_fan_speed"
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last selected setting (IPMI fan state isn't readable)."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is None or last.state not in OPTIONS:
+            return
+        if last.state == OPTION_AUTO:
+            self.coordinator.restore_state("auto", None)
+        else:
+            self.coordinator.restore_state("manual", int(last.state.rstrip("%")))
+        self.async_write_ha_state()
 
     @property
     def device_info(self) -> DeviceInfo:  # noqa: D102
